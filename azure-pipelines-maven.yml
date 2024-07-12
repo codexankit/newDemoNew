@@ -1,0 +1,99 @@
+trigger:
+  none
+  # - develop
+  # - release/*
+  # - main
+
+parameters:
+  - name: releaseId
+    type: string
+    displayName: Release WorkItem ID
+    default: 955405
+  - name: skipEarlyFeedback
+    type: boolean
+    displayName: Skip Early Feedback
+    default: false
+  - name: featureBranchScan
+    type: boolean
+    displayName: Run Security Scans on Feature Branch Builds
+    default: false
+
+resources:
+  repositories:
+    - repository: governed-templates
+      name: dj-core/governed-templates
+      ref: "main"
+      type: git
+
+variables:
+  - name: BRANCH_NAME
+    value: $(Build.SourceBranchName)
+  - name: VERSION
+    value: "1.0.0-SNAPSHOT-$(Build.BuildNumber)"
+  - group: 50661-NonProd
+  # - group: 50661-Prod
+  - name: dockerImageName
+    value: assemble-test-containers
+  - name: dockerImageTag
+    value: $(Build.SourceBranchName)-$(Build.BuildNumber)-$(Build.SourceVersion)
+  - name: ocp-dev-namespace
+    value: dev
+  - name: ocp-sit-namespace
+    value: sit
+  - name: ocp-uat-namespace
+    value: uat
+  - name: ocp-pt-namespace
+    value: pt
+  # - name: ocp-staging-namespace
+  #   value: staging
+  # - name: ocp-prod-namespace
+  #   value: prod
+  # - name: ocp-dr-namespace
+  #  value: dr
+
+extends:
+  template: governed-template/build.yml@governed-templates
+  parameters:
+    releaseId: ${{ parameters.releaseId }}
+    buildStackName: maven
+    buildStackParams:
+      featureRelease: true
+      featureBranchScan: ${{ parameters.featureBranchScan }}
+      pool: "sc-linux"
+      packageVersion: $(VERSION) #optional
+      jdkVersion: "17" #optional
+      mavenVersion: "3.6.3" #optional
+      mavenOptions: "-Xmx1024m" #optional
+      mavenPomFile: "pom.xml" #optional
+      goals: "clean install" # mandatory
+      options: "--batch-mode" #optional
+      publishJUnitResults: true #optional
+      testResultsFiles: "**/surefire-reports/TEST-*.xml" #optional
+      skipJacocoCoverage: false #optional
+      dockerBuild: false #optional
+      dockerRepository: "com/sc/rtdo/commonpipeline/ado" #optional
+      dockerFilePaths:
+        - path: "**/Dockerfile"
+          imageName: "$(dockerImageName)" # example: govpoint-etl-service, gsam-etl-service
+          imageTag: "$(dockerImageTag)"
+          dockerArguments: "--no-cache --build-arg JAVA_VERSION=17 --build-arg JAVA_HOME=/usr/lib/jvm/jre-17 --build-arg JDK_INSTALL=java-17-openjdk-headless"
+          dockerBuildContext: "$(Build.Repository.Name)"
+      calculateImageDigest: false
+      # preInputFileList: ["k8s/deployment.yaml"]
+      # prevariableList:
+      #   - name: imageTags
+      #     value: $(dockerImageTag)
+      # postinputFileList: ["k8s/deployment.yaml"]
+      # postvariableList:
+      #   - name: imageDigest
+      #     value: $(DockerImageDigest_<docker-image-name>) # replace <docker-image-name> with the value of dockerImageName present in the variable section of this pipeline file
+      #   - name: imageTags
+      #     value: $(dockerImageTag)
+      # imageListFilePath: helmchart/values/images.yaml #optional
+      # archiveType: "zip" #optional
+      # deployStackName: "helm" #optional
+      # deploymentFolderName: "k8s" #optional
+      # targetPathArtifactory: "generic-release/com/sc/rtdo/helmcharts/$(Build.Repository.Name)/" #optional
+      binaryPath: "target/"
+      sonarExclusions: "**/*.sql,**/*.xml,**/*.html,**/test/**,src/test/**,**/k8s,**/*.yaml,**/*.yml"
+      skipEarlyFeedback: ${{ parameters.skipEarlyFeedback }} # optional [To skip Early Feedback stage]
